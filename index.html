@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premium Weather by Santanu</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+        
+        body { font-family: 'Outfit', sans-serif; transition: background-color 0.5s ease, color 0.5s ease; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Float Animation */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .animate-float { animation: float 5s ease-in-out infinite; }
+
+        /* Sun Spin */
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow { animation: spin-slow 15s linear infinite; }
+
+        /* Rain Drop */
+        @keyframes rain-drop {
+            0% { transform: translateY(-5px) opacity: 0; }
+            30% { opacity: 1; }
+            100% { transform: translateY(20px); opacity: 0; }
+        }
+        .rain-drop { animation: rain-drop 1s linear infinite; }
+        
+        /* Shine Text */
+        @keyframes shine {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
+        }
+
+        /* Pulse for Red Dot */
+        @keyframes ping-slow {
+            75%, 100% { transform: scale(2); opacity: 0; }
+        }
+        .animate-ping-slow { animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite; }
+    </style>
+</head>
+<body class="overflow-hidden select-none">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- UI ICONS (Static SVGs) ---
+        const SearchIcon = ({className}) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>;
+        const BellIcon = ({className}) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>;
+        const WindIcon = ({className}) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></svg>;
+        const DropletIcon = ({className}) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>;
+        const EyeIcon = ({className}) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>;
+        const NavIcon = ({className}) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>;
+        const LoaderIcon = ({className}) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
+        const WarningIcon = ({className}) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>;
+        const ThermoIcon = ({className}) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>;
+
+        // --- ICONS (FIX: Cloud ViewBox increased to 300x300 to show full shadow) ---
+        
+        // 1. Sun
+        const Icon3DSun = ({ className }) => (
+            <svg viewBox="0 0 240 240" className={className} style={{overflow: 'visible'}}>
+                <defs>
+                    <radialGradient id="sunGrad" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+                        <stop offset="0%" stopColor="#FFD700" />
+                        <stop offset="70%" stopColor="#FFA500" />
+                        <stop offset="100%" stopColor="#FF8C00" />
+                    </radialGradient>
+                    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="10" result="coloredBlur" />
+                        <feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                    </filter>
+                </defs>
+                <circle cx="120" cy="120" r="60" fill="url(#sunGrad)" filter="url(#glow)" className="animate-float" />
+                <g className="animate-spin-slow origin-center" style={{transformOrigin: '120px 120px'}}>
+                    {[0, 45, 90, 135, 180, 225, 270, 315].map(deg => (
+                        <rect key={deg} x="115" y="30" width="10" height="30" rx="5" fill="#FFD700" transform={`rotate(${deg} 120 120)`} opacity="0.8" />
+                    ))}
+                </g>
+            </svg>
+        );
+
+        // 2. Moon
+        const Icon3DMoon = ({ className }) => (
+            <svg viewBox="0 0 240 240" className={className} style={{overflow: 'visible'}}>
+                <defs>
+                    <linearGradient id="moonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#E2E8F0" />
+                        <stop offset="100%" stopColor="#94A3B8" />
+                    </linearGradient>
+                    <filter id="moonGlow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="8" result="coloredBlur" />
+                        <feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                    </filter>
+                </defs>
+                <circle cx="120" cy="120" r="60" fill="url(#moonGrad)" filter="url(#moonGlow)" className="animate-float"/>
+                <circle cx="140" cy="100" r="10" fill="#CBD5E1" opacity="0.5" className="animate-float" style={{animationDelay:'1s'}}/>
+                <circle cx="110" cy="150" r="15" fill="#CBD5E1" opacity="0.5" className="animate-float" style={{animationDelay:'2s'}}/>
+                <circle cx="90" cy="90" r="8" fill="#CBD5E1" opacity="0.5" className="animate-float" style={{animationDelay:'0.5s'}}/>
+            </svg>
+        );
+
+        // 3. Cloud (FIXED: Increased ViewBox to 300x300 to show FULL RIGHT SHADOW)
+        const Icon3DCloud = ({ className, type = "cloud" }) => (
+            <svg viewBox="0 0 300 300" className={className} style={{overflow: 'visible'}}>
+                <defs>
+                    <linearGradient id="cloudGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#FFFFFF" />
+                        <stop offset="100%" stopColor="#E0E7FF" />
+                    </linearGradient>
+                    <filter id="cloudShadow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur in="SourceAlpha" stdDeviation="10" />
+                        <feOffset dx="8" dy="8" result="offsetblur" />
+                        <feComponentTransfer><feFuncA type="linear" slope="0.3" /></feComponentTransfer>
+                        <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
+                    </filter>
+                </defs>
+                {/* Sun Behind */}
+                {type === "partly" && <circle cx="180" cy="120" r="40" fill="#FFA500" className="animate-float" style={{animationDelay:'1s'}} />}
+                {/* Moon Behind */}
+                {type === "moon-partly" && <circle cx="180" cy="120" r="35" fill="#CBD5E1" className="animate-float" style={{animationDelay:'1s'}} />}
+                
+                {/* Cloud Shape - Centered in 300x300 */}
+                <g className="animate-float" transform="translate(20, 20)">
+                    <path d="M80,180 A30,30 0 0,1 80,120 A40,40 0 0,1 150,120 A30,30 0 0,1 150,180 Z" 
+                          fill="url(#cloudGrad)" filter="url(#cloudShadow)" className="translate-y-2" />
+                    <path d="M100,180 A35,35 0 0,1 100,110 A45,45 0 0,1 180,110 A35,35 0 0,1 180,180 Z" 
+                          fill="url(#cloudGrad)" filter="url(#cloudShadow)" transform="translate(10, -10)" />
+                </g>
+            </svg>
+        );
+
+        // 4. Rain (Uses Fixed Cloud)
+        const Icon3DRain = ({ className }) => (
+            <div className="relative w-full h-full">
+                {/* Cloud */}
+                <Icon3DCloud className="absolute inset-0 z-10" />
+                
+                {/* Rain Drops */}
+                <svg viewBox="0 0 300 300" className={`absolute inset-0 z-0 ${className}`}>
+                    <defs>
+                        <linearGradient id="rainGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stopColor="#3B82F6" />
+                            <stop offset="100%" stopColor="#60A5FA" />
+                        </linearGradient>
+                    </defs>
+                    <g className="animate-rain" transform="translate(20, 0)">
+                        <rect x="120" y="180" width="6" height="20" rx="3" fill="url(#rainGrad)" opacity="0.8" className="rain-drop" />
+                        <rect x="150" y="190" width="6" height="20" rx="3" fill="url(#rainGrad)" opacity="0.8" className="rain-drop" style={{animationDelay:'0.3s'}} />
+                        <rect x="180" y="180" width="6" height="20" rx="3" fill="url(#rainGrad)" opacity="0.8" className="rain-drop" style={{animationDelay:'0.6s'}} />
+                    </g>
+                </svg>
+            </div>
+        );
+
+        const WeatherIcon = ({ code, isDay, className }) => {
+            if ([0, 1].includes(code)) return isDay ? <Icon3DSun className={className} /> : <Icon3DMoon className={className} />;
+            if ([2, 3].includes(code)) return <Icon3DCloud type={isDay ? 'partly' : 'moon-partly'} className={className} />;
+            if ([45, 48].includes(code)) return <Icon3DCloud type="cloud" className={className} />; 
+            if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return <Icon3DRain className={className} />;
+            return <Icon3DCloud type="cloud" className={className} />;
+        };
+
+        // --- APP ---
+        function App() {
+            const [city, setCity] = useState("Kolkata, WB");
+            const [localTime, setLocalTime] = useState("");
+            const [weatherData, setWeatherData] = useState(null);
+            const [alerts, setAlerts] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [searchTerm, setSearchTerm] = useState("");
+            const [showNotifications, setShowNotifications] = useState(false);
+            const searchInputRef = useRef(null);
+
+            // Alerts Logic
+            const generateAlerts = (data) => {
+                const newAlerts = [];
+                const current = data.current;
+                if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(current.code)) {
+                    newAlerts.push({ title: "Rain Expected", desc: "Carry an umbrella. Roads might be wet.", type: "warning", icon: <WarningIcon className="w-5 h-5"/> });
+                } else if ([95, 96, 99].includes(current.code)) {
+                    newAlerts.push({ title: "Storm Warning", desc: "Thunderstorms in area. Stay indoors.", type: "danger", icon: <WarningIcon className="w-5 h-5"/> });
+                }
+                if (current.temp > 35) {
+                    newAlerts.push({ title: "Heat Advisory", desc: `Extreme heat (${Math.round(current.temp)}°C). Stay hydrated.`, type: "danger", icon: <ThermoIcon className="w-5 h-5"/> });
+                } else if (current.temp < 10) {
+                    newAlerts.push({ title: "Cold Wave", desc: `Temp is low (${Math.round(current.temp)}°C). Wear warm clothes.`, type: "info", icon: <ThermoIcon className="w-5 h-5"/> });
+                }
+                if (current.wind > 20) {
+                    newAlerts.push({ title: "High Winds", desc: `Wind speeds at ${current.wind} km/h.`, type: "warning", icon: <WindIcon className="w-5 h-5"/> });
+                }
+                if (newAlerts.length === 0) {
+                    newAlerts.push({ title: "Good Weather", desc: "Conditions are stable and clear.", type: "success", icon: <EyeIcon className="w-5 h-5"/> });
+                }
+                return newAlerts;
+            };
+
+            const fetchWeather = async (queryCity, lat=null, lon=null) => {
+                setLoading(true); setError(null); setShowNotifications(false);
+                try {
+                    let latitude = lat, longitude = lon, name = queryCity;
+                    if (!lat) {
+                        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${queryCity}&count=1&language=en&format=json`);
+                        const geoData = await geoRes.json();
+                        if (!geoData.results?.length) throw new Error("City not found.");
+                        latitude = geoData.results[0].latitude; longitude = geoData.results[0].longitude;
+                        name = `${geoData.results[0].name}, ${geoData.results[0].country_code}`;
+                    }
+                    setCity(name);
+                    
+                    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m&hourly=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto`);
+                    const data = await res.json();
+                    
+                    const now = new Date();
+                    setLocalTime(new Intl.DateTimeFormat('en-US', { timeZone: data.timezone, hour:'2-digit', minute:'2-digit', hour12:true }).format(now));
+
+                    const currentTemp = data.current.temperature_2m;
+                    const currentCode = data.current.weather_code;
+                    const currentIsDay = data.current.is_day;
+
+                    setWeatherData({
+                        current: {
+                            temp: currentTemp,
+                            desc: "Moderate Breeze", 
+                            code: currentCode,
+                            wind: data.current.wind_speed_10m,
+                            hum: data.current.relative_humidity_2m,
+                            vis: 10,
+                            feels: data.current.apparent_temperature,
+                            is_day: currentIsDay
+                        },
+                        hourly: data.hourly.time.slice(0,24).map((t,i) => {
+                            if(i===0) return { dt: t, temp: currentTemp, code: currentCode, is_day: currentIsDay };
+                            return {
+                                dt: t,
+                                temp: data.hourly.temperature_2m[i],
+                                code: data.hourly.weather_code[i],
+                                is_day: data.hourly.is_day[i]
+                            };
+                        }),
+                        daily: data.daily.time.slice(0,7).map((t,i) => ({
+                            dt: t,
+                            max: data.daily.temperature_2m_max[i],
+                            min: data.daily.temperature_2m_min[i],
+                            code: data.daily.weather_code[i]
+                        }))
+                    });
+
+                    const newAlerts = generateAlerts({ current: { ...data.current, code: currentCode } });
+                    setAlerts(newAlerts);
+                    setLoading(false);
+                } catch (e) { setError(e.message); setLoading(false); }
+            };
+
+            useEffect(() => { fetchWeather("Kolkata"); }, []);
+
+            const isDay = weatherData ? weatherData.current.is_day === 1 : true;
+
+            const theme = isDay ? "bg-slate-50 text-slate-900" : "bg-slate-950 text-white";
+            const cardTheme = isDay ? "bg-white border border-slate-100 shadow-xl shadow-slate-200/50" : "bg-slate-900 border border-slate-800 shadow-xl shadow-black/50";
+            const textPrimary = isDay ? "text-slate-800" : "text-white";
+            const textSecondary = isDay ? "text-slate-500" : "text-slate-400";
+            const inputBg = isDay ? "bg-white shadow-md text-slate-900 placeholder-slate-400" : "bg-slate-900 border border-slate-800 text-white placeholder-slate-500";
+
+            const shineStyle = {
+                backgroundImage: isDay 
+                    ? 'linear-gradient(90deg, #b45309, #000, #b45309)' 
+                    : 'linear-gradient(90deg, #60A5FA, #FFF, #60A5FA)',
+                backgroundSize: '200% auto',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                animation: 'shine 4s linear infinite'
+            };
+
+            const getAlertColor = (type) => {
+                if(type === 'warning') return isDay ? 'bg-orange-50 text-orange-700' : 'bg-orange-900/30 text-orange-200';
+                if(type === 'danger') return isDay ? 'bg-red-50 text-red-700' : 'bg-red-900/30 text-red-200';
+                if(type === 'success') return isDay ? 'bg-green-50 text-green-700' : 'bg-green-900/30 text-green-200';
+                return isDay ? 'bg-blue-50 text-blue-700' : 'bg-blue-900/30 text-blue-200';
+            };
+
+            if (loading) return <div className="h-screen flex items-center justify-center bg-slate-950"><LoaderIcon className="animate-spin text-blue-500 w-10 h-10"/></div>;
+
+            return (
+                <div className={`relative min-h-screen w-full font-sans transition-colors duration-500 ${theme}`}>
+                    
+                    {/* HEADER */}
+                    <header className="relative flex justify-center items-center p-6 pt-10 z-50">
+                        
+                        {/* CENTER STACK: DEV NAME -> CITY -> BADGE */}
+                        <div className="flex flex-col items-center w-full max-w-sm">
+                            
+                            {/* 1. Developer Name (Top Center) */}
+                            <div className="mb-1 flex gap-1.5 items-center opacity-90 hover:scale-105 transition-transform duration-300 cursor-default">
+                                <span className="text-[10px] font-bold tracking-[0.2em] uppercase" style={shineStyle}>Made By</span>
+                                <span className="text-[14px] font-black tracking-widest uppercase" style={shineStyle}>Santanu</span>
+                            </div>
+
+                            {/* 2. City Name */}
+                            <h1 className={`text-xl font-bold tracking-wide truncate w-full text-center ${textPrimary} drop-shadow-sm`}>{city}</h1>
+                            
+                            {/* 3. Live Badge */}
+                            <div className={`mt-2 inline-flex items-center justify-center gap-2 px-4 py-1.5 rounded-full border shadow-sm ${isDay ? 'bg-orange-50 border-orange-100 text-orange-700' : 'bg-blue-950/40 border-blue-900 text-blue-200'}`}>
+                                <div className={`w-2 h-2 shrink-0 rounded-full animate-pulse ${isDay ? 'bg-orange-500' : 'bg-blue-400'}`}></div>
+                                <span className="text-[10px] font-bold tracking-widest uppercase whitespace-nowrap">
+                                    {isDay ? 'Live Day' : 'Live Night'} • {localTime}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        {/* RIGHT: Bell (Absolute) */}
+                        <div className="absolute right-6 top-8">
+                            <button onClick={() => setShowNotifications(!showNotifications)} className={`p-3 rounded-full transition-all duration-300 hover:scale-110 ${isDay ? 'bg-white shadow-md text-slate-700' : 'bg-slate-800 border border-slate-700 text-white'}`}>
+                                <BellIcon className="w-5 h-5" />
+                                {alerts.some(a => a.type !== 'success') && (
+                                    <span className="absolute top-0 right-0 w-3 h-3 flex items-center justify-center">
+                                        <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500 border-2 border-white"></span>
+                                    </span>
+                                )}
+                            </button>
+                            
+                            {/* NOTIFICATION */}
+                            <div className={`absolute right-0 top-16 w-80 sm:w-96 rounded-2xl p-5 shadow-2xl origin-top-right z-[100] transition-all duration-300 ease-in-out transform ${showNotifications ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'} ${cardTheme}`}>
+                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-200/10">
+                                    <h4 className={`text-sm font-bold ${textPrimary}`}>Status & Alerts</h4>
+                                    {alerts.length > 0 && <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full font-bold">{alerts.length} NEW</span>}
+                                </div>
+                                {alerts.map((alert, index) => (
+                                    <div key={index} className={`flex items-start gap-3 p-3 rounded-xl mb-2 transition-colors ${getAlertColor(alert.type)}`}>
+                                        <div className={`p-2 rounded-full bg-white/20`}>{alert.icon}</div>
+                                        <div>
+                                            <p className={`text-sm font-bold mb-0.5`}>{alert.title}</p>
+                                            <p className={`text-xs opacity-80`}>{alert.desc}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* SEARCH */}
+                    <div className="px-6 mb-4 mt-2">
+                        <form onSubmit={(e) => { e.preventDefault(); if(searchTerm.trim()) fetchWeather(searchTerm); setSearchTerm(""); }} className="relative group">
+                            <SearchIcon className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors w-5 h-5 ${textSecondary}`} />
+                            <input 
+                                type="text" 
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Search City..." 
+                                className={`w-full border-none rounded-2xl py-4 pl-12 pr-12 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all ${inputBg}`}
+                            />
+                            <button type="button" onClick={() => navigator.geolocation.getCurrentPosition(p => fetchWeather("", p.coords.latitude, p.coords.longitude))} className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-colors ${isDay ? 'hover:bg-slate-100 text-slate-500' : 'hover:bg-slate-800 text-slate-300'}`}>
+                                <NavIcon className="w-5 h-5" />
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* MAIN CONTENT */}
+                    <main className="px-6 pb-8 overflow-y-auto h-[calc(100vh-220px)] no-scrollbar">
+                        {weatherData && (
+                        <div className="flex flex-col items-center justify-center py-6">
+                            
+                            {/* MAIN ICON - FIXED CENTER */}
+                            <div className="w-72 h-72 flex items-center justify-center mb-[-40px] relative z-10 p-2">
+                                <WeatherIcon code={weatherData.current.code} isDay={isDay} className="w-full h-full drop-shadow-2xl" />
+                            </div>
+                            
+                            <h2 className={`text-[6rem] leading-none font-bold tracking-tighter z-20 relative ${isDay ? 'text-slate-900' : 'text-white'}`}>
+                                {Math.round(weatherData.current.temp)}°
+                            </h2>
+                            <p className={`text-xl font-medium mt-2 capitalize ${textSecondary}`}>
+                                {weatherData.current.desc || "Clear Sky"}
+                            </p>
+                            
+                            {/* STATS */}
+                            <div className="grid grid-cols-3 gap-3 w-full max-w-sm mt-8">
+                                <div className={`flex flex-col items-center p-4 rounded-2xl transition-transform hover:scale-105 duration-300 ${cardTheme}`}>
+                                    <WindIcon className="mb-2 text-blue-500 w-5 h-5" />
+                                    <span className={`text-sm font-bold ${textPrimary}`}>{weatherData.current.wind}</span>
+                                    <span className={`text-[10px] uppercase opacity-60 ${textSecondary}`}>km/h</span>
+                                </div>
+                                <div className={`flex flex-col items-center p-4 rounded-2xl transition-transform hover:scale-105 duration-300 ${cardTheme}`}>
+                                    <DropletIcon className="mb-2 text-blue-500 w-5 h-5" />
+                                    <span className={`text-sm font-bold ${textPrimary}`}>{weatherData.current.hum}</span>
+                                    <span className={`text-[10px] uppercase opacity-60 ${textSecondary}`}>% Hum</span>
+                                </div>
+                                <div className={`flex flex-col items-center p-4 rounded-2xl transition-transform hover:scale-105 duration-300 ${cardTheme}`}>
+                                    <EyeIcon className="mb-2 text-blue-500 w-5 h-5" />
+                                    <span className={`text-sm font-bold ${textPrimary}`}>{weatherData.current.vis}</span>
+                                    <span className={`text-[10px] uppercase opacity-60 ${textSecondary}`}>km Vis</span>
+                                </div>
+                            </div>
+                        </div>
+                        )}
+
+                        {/* HOURLY */}
+                        <div className="mt-6">
+                            <div className="flex justify-between items-end mb-2 px-2">
+                                <h3 className={`text-base font-bold ${textPrimary}`}>Hourly</h3>
+                                <span className={`text-xs font-medium ${textSecondary}`}>Today</span>
+                            </div>
+                            <div className="flex overflow-x-auto gap-3 pb-8 pt-4 -mx-6 px-6 no-scrollbar">
+                                {weatherData?.hourly.map((h, i) => (
+                                    <div key={i} className={`flex-shrink-0 w-[76px] p-3 rounded-2xl flex flex-col items-center gap-3 transition-all duration-300 hover:scale-105 ${i===0 ? 'bg-blue-600 text-white shadow-xl scale-105 ring-4 ring-blue-500/20' : cardTheme}`}>
+                                        <span className={`text-[10px] font-bold ${i===0 ? 'opacity-100' : 'opacity-60 ' + textSecondary}`}>{i===0?'Now':new Date(h.dt).getHours()+':00'}</span>
+                                        <div className="w-10 h-10">
+                                            <WeatherIcon code={h.code} isDay={h.is_day} className="w-full h-full" />
+                                        </div>
+                                        <span className={`text-sm font-bold ${i===0 ? 'text-white' : textPrimary}`}>{Math.round(h.temp)}°</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* DAILY */}
+                        <div className="mt-2 pb-10">
+                            <h3 className={`text-base font-bold mb-4 px-2 ${textPrimary}`}>Forecast</h3>
+                            <div className="space-y-4 px-2 pb-6">
+                                {weatherData?.daily.map((d, i) => (
+                                    <div key={i} className={`flex items-center justify-between p-4 rounded-2xl transition-transform hover:scale-[1.02] duration-300 ${cardTheme}`}>
+                                        <span className={`w-16 text-sm font-bold ${textPrimary}`}>{i===0?'Today':new Date(d.dt).toLocaleDateString('en-US',{weekday:'short'})}</span>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10">
+                                                <WeatherIcon code={d.code} isDay={1} className="w-full h-full" />
+                                            </div>
+                                            <span className={`text-xs opacity-60 ${textSecondary}`}>Cloudy</span>
+                                        </div>
+                                        <div className="flex gap-3">
+                                            <span className={`font-bold ${textPrimary}`}>{Math.round(d.max)}°</span>
+                                            <span className={`opacity-50 ${textSecondary}`}>{Math.round(d.min)}°</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
